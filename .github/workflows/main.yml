@@ -1,6 +1,6 @@
  - name: Docker Build Tag Publish
    uses: bitovi/github-actions-docker-publish@v1.0.7
-    with :
+     with :
     checkout: null
     image_tag: null
     use_sha: null
