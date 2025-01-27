@@ -1,54 +1,32 @@
-# Python Django
-# Test a Django project on multiple versions of Python.
-# Add steps that analyze code, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/python
-
 trigger:
-- main
+- main  # Adjust the branch as needed
 
 pool:
-  vmImage: ubuntu-latest
-strategy:
-  matrix:
-    Python36:
-      PYTHON_VERSION: '3.6'
-  maxParallel: 0
+  vmImage: 'ubuntu-latest'
 
 steps:
-- task: UsePythonVersion@0
+# Step 1: Pull the OWASP ZAP Docker Image
+- task: Bash@3
+  displayName: 'Pull OWASP ZAP Docker Image'
   inputs:
-    versionSpec: '$(PYTHON_VERSION)'
-    architecture: 'x64'
-
-- task: PythonScript@0
-  displayName: 'Export project path'
-  inputs:
-    scriptSource: 'inline'
+    targetType: 'inline'
     script: |
-      """Search all subdirectories for `manage.py`."""
-      from glob import iglob
-      from os import path
-      # Python >= 3.5
-      manage_py = next(iglob(path.join('**', 'manage.py'), recursive=True), None)
-      if not manage_py:
-          raise SystemExit('Could not find a Django project')
-      project_location = path.dirname(path.abspath(manage_py))
-      print('Found Django project in', project_location)
-      print('##vso[task.setvariable variable=projectRoot]{}'.format(project_location))
+      docker pull owasp/zap2docker-stable
 
-- script: |
-    python -m pip install --upgrade pip setuptools wheel
-    pip install -r requirements.txt
-    pip install unittest-xml-reporting
-  displayName: 'Install prerequisites'
-
-- script: |
-    pushd '$(projectRoot)'
-    python manage.py test --testrunner xmlrunner.extra.djangotestrunner.XMLTestRunner --no-input
-  displayName: 'Run tests'
-
-- task: PublishTestResults@2
+# Step 2: Run OWASP ZAP Container
+- task: Bash@3
+  displayName: 'Run OWASP ZAP Scan'
   inputs:
-    testResultsFiles: "**/TEST-*.xml"
-    testRunTitle: 'Python $(PYTHON_VERSION)'
-  condition: succeededOrFailed()
+    targetType: 'inline'
+    script: |
+      docker run -v $(System.DefaultWorkingDirectory):/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py \
+        -t https://demo.testfire.net \
+        -r zap_report.html \
+        -J zap_report.json
+
+# Step 3: Publish OWASP ZAP Report
+- task: PublishPipelineArtifact@1
+  displayName: 'Publish ZAP Report'
+  inputs:
+    targetPath: '$(System.DefaultWorkingDirectory)/zap_report.html'
+    artifactName: 'ZAP Report'
